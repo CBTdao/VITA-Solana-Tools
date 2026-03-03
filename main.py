@@ -39,11 +39,10 @@ def calculate_v23_score(p):
     fdv = p.get('fdv', 0)
     vol24 = p.get('volume', {}).get('h24', 0)
     
-    # 物理修复：使用 safe_div 防止镜像链路异常
     risk_ratio = safe_div(fdv, liq)
     
-    # 评分逻辑：流动性(20) + 市值健康度(20) + 交易活跃度(20)
-    if liq > 400000: score += 20
+    # 评分逻辑：流动性 + 市值健康度 + 交易活跃度
+    if liq > 300000: score += 20
     if 2 < risk_ratio < 15: score += 20
     if vol24 > liq * 0.5: score += 20
     
@@ -61,7 +60,6 @@ def hunt_solana_v23():
     try:
         response = requests.get(url, headers=headers, timeout=20).json()
         pairs = response.get('pairs', [])
-        
         unique_tokens = []
         seen = set()
         
@@ -76,7 +74,7 @@ def hunt_solana_v23():
             addr = base_token.get('address')
             symbol = base_token.get('symbol', '').upper()
             
-            # 过滤逻辑：非黑名单、非重复、非 SOL 关键字、流动性 > 30w (适度下调以捕捉新芽)
+            # 过滤逻辑：非黑名单、非 SOL 关键字、流动性 > 30w
             if (addr not in seen and 
                 addr not in SOL_BLACKLIST and 
                 "SOL" not in symbol and
@@ -88,10 +86,10 @@ def hunt_solana_v23():
             if len(unique_tokens) >= 5: break
             
         if not unique_tokens:
-            return "⏳ **系统扫描中...**\n当前 Solana 链上暂无符合 30w+ 流动性门槛的新信号。"
+            return "⏳ **系统扫描中...**\n暂无符合 30w+ 流动性门槛的新信号。"
             
         report = f"🚀 **Solana 全生态扫描 (V23.3)**\n"
-        report += f"状态：过滤 SOL 完成 | 深度穿透中...\n\n"
+        report += f"状态：过滤 SOL 完成 | 物理修复生效\n\n"
         
         for p in unique_tokens:
             score = calculate_v23_score(p)
@@ -101,3 +99,19 @@ def hunt_solana_v23():
             report += f"  🏆 综合评分: `{score}`\n"
             report += f"  💰 流动性: `${int(p['liquidity']['usd']):,}`\n"
             report += f"  🎯 现价: `${price:.8f}`\n"
+            report += f"  💳 佣金打赏: `{MY_WALLET}`\n"
+            report += f"  [实时追踪]({p['url']})\n\n"
+            
+        return report
+    except Exception as e:
+        return f"❌ 物理链路扫描异常: {str(e)}"
+
+def main():
+    if not TG_TOKEN or not CH_ID: 
+        print("缺少环境变量")
+        return
+    content = hunt_solana_v23()
+    send_tg_message(content)
+
+if __name__ == "__main__":
+    main()
