@@ -1,3 +1,4 @@
+
 name: 100M_Asset_Engine
 
 on:
@@ -17,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: pip install requests
       - name: Execute Engine
-        # 🚨 重点：你必须手动加上下面这两行映射，脚本才能读到数据
+        # 🚨 这是解决“未读取”问题的唯一方法：显式映射环境变量
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
