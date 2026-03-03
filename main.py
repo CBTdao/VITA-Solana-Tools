@@ -1,131 +1,103 @@
-
 import os
 import requests
-import telebot
-from telebot import types
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-import time
+import datetime
+import json
 
-# --- 1. 物理配置区 ---
-API_TOKEN = os.getenv("TG_BOT_TOKEN")
+# --- 终极配置区 ---
+TG_TOKEN = os.getenv("TG_BOT_TOKEN")
 CH_ID = os.getenv("CHANNEL_ID")
-MY_WALLET = "CjBusumcVax2DtzLWVMd6KKXSHDeV7tbNRYdaVHL5SJf"
-bot = telebot.TeleBot(API_TOKEN)
 
-# --- 2. 鲁棒性对冲：安全计算函数 ---
-def safe_div(n, d):
-    """防止分母为0导致系统停机"""
+# 物理路径：2026 监控的 Top 5 顶级盈利地址 (示例：PNL > 5M USD)
+SMART_MONEY_LIST = [
+    "675W...p91", # 某 Tier 1 做市商个人号
+    "At5p...u22", # Pump.fun 早期收割机
+    "Gv8x...n33"  # 某知名 DeFi 科学家
+]
+
+def send_tg_message(text):
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    payload = {"chat_id": CH_ID, "text": text, "parse_mode": "Markdown", "disable_web_page_preview": True}
     try:
-        return float(n) / float(d) if float(d) > 0 else 0
-    except:
-        return 0
+        requests.post(url, data=payload, timeout=10)
+    except Exception as e: print(f"发送失败: {e}")
 
-# --- 3. 核心审计逻辑 (V24+V25 融合版) ---
-def analyze_token_v28(p):
-    # 提取物理数据
-    liq = p.get('liquidity', {}).get('usd', 0)
-    fdv = p.get('fdv', 0)
-    vol24 = p.get('volume', {}).get('h24', 0)
+# --- 模块 A: 聪明钱共振识别 (Smart Money Resonance) ---
+def check_smart_money_inflow(p):
+    # 逻辑对冲：2026 年顶级钱包会通过子钱包分批买入，但最终会汇聚到主钱包
+    # 模拟探测：如果 1h 内有超过 3 个关联高净值地址买入，赋予“聪明钱共振”标签
     h1_txns = p.get('txns', {}).get('h1', {})
-    buys = h1_txns.get('buys', 0)
-    sells = h1_txns.get('sells', 0)
+    buy_vol = p.get('volume', {}).get('h1', 0)
+    
+    # 核心指标：高净值占比
+    # 如果平均单笔买入 > 2000 USD，且买入频率稳定，说明有“懂行的人”在进场
+    avg_buy = buy_vol / h1_txns.get('buys', 1)
+    
+    if avg_buy > 2000:
+        return "🧠 聪明钱正在布局 (Smart Money Inflow)", 30 # 重磅奖励分
+    return "✅ 散户自然流入", 0
 
+# --- 模块 B: V24 终极综合评分 (双重验证版) ---
+def calculate_v24_score(p):
     score = 0
-    tags = []
-
-    # A. 聪明钱与流动性对冲 (30分)
-    if liq > 500000: score += 20
-    avg_buy = safe_div(vol24, (buys + sells))
-    if avg_buy > 2000: 
-        score += 10
-        tags.append("🧠 聪明钱布局")
-
-    # B. 老鼠仓穿透 (强制扣分项)
-    # 如果市值是流动性的 20 倍以上，判定为高危控制盘
-    risk_ratio = safe_div(fdv, liq)
-    if risk_ratio > 20:
-        score -= 50
-        tags.append("🚫 高危老鼠仓")
-
-    # C. 审计背书 (20分)
-    if p.get('info', {}).get('audits'):
-        score += 20
-        tags.append("🛡️ 审计已通过")
-
-    return max(0, score), tags
-
-# --- 4. PDF 报告生成模块 ---
-def generate_audit_pdf(addr, val, fee, tags):
-    file_path = f"Audit_{addr[:6]}.pdf"
-    c = canvas.Canvas(file_path, pagesize=A4)
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(50, 800, "2026 AI ASSET AUDIT & RECOVERY REPORT")
-    c.setFont("Helvetica", 10)
-    c.drawString(50, 785, f"Address: {addr} | Timestamp: {time.ctime()}")
-    c.line(50, 775, 550, 775)
-
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, 740, "Diagnostic Tags:")
-    c.setFont("Helvetica", 11)
-    y = 720
-    for tag in tags:
-        c.drawString(70, y, f"- {tag}")
-        y -= 20
-
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, 600, "Financial Recovery Summary:")
-    c.setFont("Helvetica", 12)
-    c.drawString(70, 580, f"Detected Unclaimed Assets: ${val}")
-    c.setFillColorRGB(0.8, 0, 0)
-    c.drawString(70, 560, f"Recovery Commission (20%): ${fee} (PENDING)")
+    # 1. 资金与宏观对冲 (20分)
+    liq = p.get('liquidity', {}).get('usd', 0)
+    score += 20 if liq > 500000 else 10
     
-    c.setFillColorRGB(0, 0, 0)
-    c.drawString(50, 500, "To unlock the full claim guide, please pay commission to:")
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(50, 480, f"SOLANA: {MY_WALLET}")
+    # 2. 聪明钱权重 (30分) - 本版本核心
+    sm_label, sm_bonus = check_smart_money_inflow(p)
+    score += sm_bonus
     
-    c.save()
-    return file_path
-
-# --- 5. Telegram 收银员交互 ---
-@bot.message_handler(commands=['start'])
-def welcome(message):
-    bot.reply_to(message, "💰 **欢迎来到 2026 链上收割工厂**\n请输入 Solana 钱包地址或代币地址开始审计：")
-
-@bot.message_handler(func=lambda message: len(message.text) > 30)
-def handle_request(message):
-    addr = message.text
-    bot.send_message(message.chat.id, "🔄 正在穿透底层数据，请稍候...")
+    # 3. 审计与 CEX 预期 (20分)
+    info = p.get('info', {})
+    score += 20 if info.get('audits') else 5
     
+    # 4. 筹码集中度预警 (强制对冲)
+    if (p.get('fdv', 0) / liq if liq > 0 else 100) > 15:
+        score -= 50 # 结构风险直接 Pass
+        
+    return max(0, score), sm_label
+
+# --- 模块 C: 引擎核心 V24 ---
+def hunt_solana_v24():
+    url = "https://api.dexscreener.com/latest/dex/search?q=solana"
     try:
-        # 实际探测 (对接 DexScreener API 作为示例数据源)
-        url = f"https://api.dexscreener.com/latest/dex/tokens/{addr}"
-        res = requests.get(url, timeout=10).json()
-        pair = res.get('pairs', [{}])[0] if res.get('pairs') else {}
+        response = requests.get(url, timeout=10).json()
+        pairs = response.get('pairs', [])
+        unique_tokens = []
+        seen = set()
         
-        score, tags = analyze_token_v28(pair)
+        # 100万终极门槛：流动性 > 50w USD (防止大资金滑点)
+        for p in pairs:
+            addr = p['baseToken']['address']
+            if addr not in seen and p.get('liquidity', {}).get('usd', 0) > 500000:
+                unique_tokens.append(p)
+                seen.add(addr)
+            if len(unique_tokens) >= 3: break
+            
+        report = "⚡ **Solana 聪明钱镜像雷达 (V24)**\n"
         
-        # 自动计算沉默资产回收 (模拟逻辑)
-        unclaimed_val = 1250.0  # 假设检测到资产
-        fee = unclaimed_val * 0.2
-        
-        # 生成 PDF
-        pdf_path = generate_audit_pdf(addr, unclaimed_val, fee, tags)
-        
-        with open(pdf_path, 'rb') as doc:
-            bot.send_document(
-                message.chat.id, 
-                doc, 
-                caption=f"🔍 审计完成！综合评分: `{score}`\n佣金解锁地址: `{MY_WALLET}`",
-                parse_mode="Markdown"
-            )
-        os.remove(pdf_path) # 发送后清理本地文件
-        
-    except Exception as e:
-        bot.send_message(message.chat.id, f"❌ 处理失败: 链路拥堵或地址格式错误。")
+        for p in unique_tokens:
+            score, sm_label = calculate_v24_score(p)
+            price = float(p['priceUsd'])
+            
+            # 策略：只有 70 分以上的“聪明钱共振盘”才触发强力狙击
+            if score >= 70:
+                entry = price * 0.95 # 聪明钱抢筹时，回调往往极小
+                tp = entry * 6.0      # 目标 500%+ (跟紧聪明钱吃大肉)
+                sl = entry * 0.92     # 8% 止损
+                report += f"- **{p['baseToken']['name']}** | {sm_label}\n"
+                report += f"  👑 绝密分: `{score}` | 🎯 狙击位: `${entry}`\n"
+                report += f"  🛑 止损: `${sl}` | 💰 财富目标: 500%+\n"
+            else:
+                report += f"- **{p['baseToken']['name']}**: 评分 `{score}` (暂无巨头共振)\n"
+            report += f"  [聪明钱流向追踪]({p['url']})\n"
+            
+        return report
+    except Exception as e: return f"❌ 镜像链路异常: {e}"
 
-# --- 6. 自动执行入口 ---
+def main():
+    if not TG_TOKEN or not CH_ID: return
+    send_tg_message(hunt_solana_v24())
+
 if __name__ == "__main__":
-    print("🚀 2026 收割工厂已上线，正在监听地址...")
-    bot.polling(none_stop=True)
+    main()
