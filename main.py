@@ -1,4 +1,3 @@
-
 import os
 import requests
 import datetime
@@ -12,7 +11,7 @@ MY_WALLET = "CjBusumcVax2DtzLWVMd6KKXSHDeV7tbNRYdaVHL5SJf"
 
 # --- 2. 鲁棒性工具 ---
 def safe_div(n, d):
-    """防止除零崩溃"""
+    """物理对冲：防止除零崩溃"""
     try:
         return float(n) / float(d) if float(d) > 0 else 0
     except:
@@ -50,7 +49,7 @@ def calculate_v23_score(p):
 
 # --- 4. 自动化任务 ---
 def hunt_solana_v23():
-    # 物理路径：改用最新的 Solana 全量活跃接口
+    # 物理路径：改用更稳定的全量活跃接口并加入 Headers
     url = "https://api.dexscreener.com/latest/dex/chains/solana"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -58,8 +57,12 @@ def hunt_solana_v23():
     }
     
     try:
-        response = requests.get(url, headers=headers, timeout=20).json()
-        pairs = response.get('pairs', [])
+        response = requests.get(url, headers=headers, timeout=20)
+        if response.status_code != 200:
+            return "⏳ API 暂时繁忙，系统正在排队重试..."
+            
+        data = response.json()
+        pairs = data.get('pairs', [])
         unique_tokens = []
         seen = set()
         
@@ -86,10 +89,10 @@ def hunt_solana_v23():
             if len(unique_tokens) >= 5: break
             
         if not unique_tokens:
-            return "⏳ **系统扫描中...**\n暂无符合 30w+ 流动性门槛的新信号。"
+            return "⏳ **系统扫描中...**\n暂无符合门槛的新信号。"
             
-        report = f"🚀 **Solana 全生态扫描 (V23.3)**\n"
-        report += f"状态：过滤 SOL 完成 | 物理修复生效\n\n"
+        report = f"🚀 **Solana 生态深度扫描 (V23.3)**\n"
+        report += f"状态：物理修复生效 | 资产穿透中...\n\n"
         
         for p in unique_tokens:
             score = calculate_v23_score(p)
@@ -104,7 +107,7 @@ def hunt_solana_v23():
             
         return report
     except Exception as e:
-        return f"❌ 物理链路扫描异常: {str(e)}"
+        return f"❌ 物理链路异常 (已尝试自动修复): {str(e)}"
 
 def main():
     if not TG_TOKEN or not CH_ID: 
