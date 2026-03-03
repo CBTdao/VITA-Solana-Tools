@@ -4,7 +4,7 @@ name: 100M_Asset_Engine
 on:
   workflow_dispatch: 
   schedule:
-    - cron: '0 */4 * * *'
+    - cron: '*/30 * * * *'
 
 jobs:
   build:
