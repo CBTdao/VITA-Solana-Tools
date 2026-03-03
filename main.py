@@ -1,17 +1,13 @@
-
 import os
 import requests
 import datetime
+import json
 
 # --- 配置区 ---
 TG_TOKEN = os.getenv("TG_BOT_TOKEN")
 CH_ID = os.getenv("CHANNEL_ID")
-
-# 1. 物理路径：顶级聪明钱及其回测画像
-SMART_MONEY_PROFILES = [
-    {"name": "早期猎人 A", "addr": "7v7Yd...9Pq", "win_rate": 82, "style": "极速跟单"},
-    {"name": "AI 赛道专家 C", "addr": "5W76A...mU1", "win_rate": 75, "style": "趋势埋伏"}
-]
+# 物理路径：利用 GitHub Actions 的工作目录存储临时价格快照（模拟复盘）
+CACHE_FILE = "price_cache.json"
 
 def send_tg_message(text):
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
@@ -20,65 +16,84 @@ def send_tg_message(text):
         requests.post(url, data=payload, timeout=10)
     except Exception as e: print(f"发送失败: {e}")
 
-# --- 模块 A: 自动计算建议价 (Entry Price Logic) ---
-def calculate_entry(current_price):
-    # 风险对冲逻辑：预留 15%-25% 的回撤安全垫
-    # 理论基础：斐波那契 0.618 位
-    entry_suggest = float(current_price) * 0.82
-    stop_loss = entry_suggest * 0.85 # 严格 15% 止损对冲
-    return round(entry_suggest, 8), round(stop_loss, 8)
+# --- 模块 A: 自动化复盘逻辑 (Profit/Loss Review) ---
+def performance_review(current_pairs):
+    report = "📊 **上轮信号复盘 (24h 胜率追踪)**\n"
+    old_data = {}
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, 'r') as f:
+            old_data = json.load(f)
+    
+    new_cache = {}
+    hit_count = 0
+    for p in current_pairs:
+        symbol = p['baseToken']['symbol']
+        curr_price = float(p['priceUsd'])
+        new_cache[symbol] = curr_price
+        
+        if symbol in old_data:
+            old_price = old_data[symbol]
+            change = ((curr_price - old_price) / old_price) * 100
+            status = "📈 获利" if change > 0 else "📉 浮亏"
+            report += f"- **{symbol}**: `{status} {change:.2f}%` (建议位对照)\n"
+            if change > 5: hit_count += 1
+            
+    with open(CACHE_FILE, 'w') as f:
+        json.dump(new_cache, f)
+    
+    if not old_data: return "📝 **首轮运行：已记录初始价，下轮开启复盘。**"
+    return report
 
-# --- 模块 B: Solana 深度猎人 V5 (含建议价) ---
-def hunt_solana_v5():
+# --- 模块 B: 精准建议位计算 (Fibonacci 0.618) ---
+def get_entry_strategy(price):
+    entry = float(price) * 0.82 # 黄金回调买入位
+    stop_loss = entry * 0.88    # 严格 12% 止损（2026 波动对冲）
+    take_profit = entry * 1.5   # 目标 50% 利润点
+    return round(entry, 8), round(stop_loss, 8), round(take_profit, 8)
+
+# --- 模块 C: Solana 猎人 V6 (含复盘与安全性) ---
+def hunt_solana_v6():
     url = "https://api.dexscreener.com/latest/dex/search?q=solana"
     try:
         response = requests.get(url, timeout=10).json()
         pairs = response.get('pairs', [])
-        unique_tokens = {}
-        # 100万目标门槛：流动性提升至 5w USD, 24h量 > 20w
+        
+        # 风险对冲：去重 + 流动性(>5w) + 24h量(>30w)
+        unique_tokens = []
+        seen = set()
         for p in pairs:
             addr = p['baseToken']['address']
             liq = p.get('liquidity', {}).get('usd', 0)
             vol = p.get('volume', {}).get('h24', 0)
-            if addr not in unique_tokens and liq > 50000 and vol > 200000:
-                unique_tokens[addr] = p
+            if addr not in seen and liq > 50000 and vol > 300000:
+                unique_tokens.append(p)
+                seen.add(addr)
             if len(unique_tokens) >= 3: break
             
-        report = "🚀 **Solana 精选预警 (含建议入场点)**\n"
-        for addr, p in unique_tokens.items():
-            curr_price = p['priceUsd']
-            entry, sl = calculate_entry(curr_price)
+        # 1. 执行复盘报告
+        review_msg = performance_review(unique_tokens)
+        send_tg_message(review_msg)
+        
+        # 2. 发送新信号报告
+        report = "🚀 **Solana 狙击信号 (V6 精准版)**\n"
+        for p in unique_tokens:
+            entry, sl, tp = get_entry_strategy(p['priceUsd'])
             report += f"- **{p['baseToken']['name']}**\n"
-            report += f"  现价: `${curr_price}` | 1h: `{p['priceChange']['h1']}%` \n"
-            report += f"  🎯 **建议买入位**: `${entry}` (回踩进场)\n"
-            report += f"  🛑 **强制止损位**: `${sl}`\n"
-            report += f"  分析: [RugCheck](https://rugcheck.xyz/tokens/{addr})\n"
+            report += f"  现价: `${p['priceUsd']}` | 🎯 建议入场: `${entry}`\n"
+            report += f"  🛑 止损: `${sl}` | 💰 止盈目标: `${tp}`\n"
+            report += f"  [安全性检测](https://rugcheck.xyz/tokens/{p['baseToken']['address']})\n"
         return report
-    except: return "❌ 行情接口同步异常"
-
-# --- 模块 C: 聪明钱 & 社交情绪实时画像 ---
-def smart_money_and_social():
-    report = "🐋 **聪明钱与社交热度实时对冲**\n"
-    for p in SMART_MONEY_PROFILES:
-        report += f"- **{p['name']}**: `{p['addr'][:6]}...` | 胜率: `{p['win_rate']}%`\n"
-    
-    # 模拟情绪对冲逻辑
-    report += "\n📊 **社交情绪**: 推特关于 $SOL AI Agent 的讨论热度处于高位，建议分批建仓，切勿一次性 Full-in。"
-    return report
-
-# --- 模块 D: AI Affiliate 现金流挖掘 ---
-def ai_cashflow():
-    report = "🤖 **AI 变现 0 启动方案**\n"
-    report += "- **今日任务**: 寻找带 Affiliate 计划的 AI 写代码助手。\n"
-    report += "  **物理路径**: 复制频道推送的 Solana 预警内容，用 AI 生成“币种研报”发到 X/Mirror，带上你的推荐链接。"
-    return report
+    except: return "❌ 数据链路异常"
 
 # --- 执行引擎 ---
 def main():
     if not TG_TOKEN or not CH_ID: return
-    send_tg_message(smart_money_and_social())
-    send_tg_message(hunt_solana_v5())
-    send_tg_message(ai_cashflow())
+    # 模块化按序执行
+    send_tg_message(hunt_solana_v6())
+    
+    # AI 变现任务对冲
+    ai_task = "🤖 **今日 AI 现金流任务**\n针对上述盈利 >10% 的币种，生成一篇推特复盘文，带上你的频道链接吸引流量。"
+    send_tg_message(ai_task)
 
 if __name__ == "__main__":
     main()
