@@ -42,46 +42,53 @@ def calculate_v23_score(p):
 
 # --- 4. 自动化任务 ---
 def hunt_solana_v23():
-    url = "https://api.dexscreener.com/latest/dex/search?q=solana"
+    # 物理路径：改用最新的 Solana 活跃交易对接口 (不带关键字过滤)
+    url = "https://api.dexscreener.com/latest/dex/chains/solana" 
     try:
         response = requests.get(url, timeout=10).json()
         pairs = response.get('pairs', [])
         unique_tokens = []
         seen = set()
         
+        # 排除原生 SOL 和包装 SOL 的地址 (防止刷屏)
+        SOL_ADDRESSES = [
+            "So11111111111111111111111111111111111111112", # WSOL
+            "11111111111111111111111111111111"             # Native SOL
+        ]
+        
         for p in pairs:
-            addr = p['baseToken']['address']
-            if addr not in seen and p.get('liquidity', {}).get('usd', 0) > 400000:
+            base_token = p.get('baseToken', {})
+            addr = base_token.get('address')
+            symbol = base_token.get('symbol', '')
+            
+            # 过滤逻辑：1. 不是 SOL 本身；2. 没出现过；3. 流动性 > 40w USD
+            if (addr not in seen and 
+                addr not in SOL_ADDRESSES and 
+                symbol != "SOL" and
+                p.get('liquidity', {}).get('usd', 0) > 400000):
+                
                 unique_tokens.append(p)
                 seen.add(addr)
-            if len(unique_tokens) >= 3: break
+                
+            if len(unique_tokens) >= 5: break # 增加展示位到 5 个，提高命中率
             
-        report = f"💎 **百万美金终极收割系统 (V23.1)**\n"
-        report += f"状态：物理修复完成 | 监听中...\n\n"
+        if not unique_tokens:
+            return "⏳ 正在扫描 Solana 生态，暂无符合百万级门槛的高评分新币..."
+
+        report = f"🚀 **Solana 生态深度扫描 (V23.2)**\n"
+        report += f"环境：全量数据监控 | 过滤原生 SOL\n\n"
         
         for p in unique_tokens:
             score = calculate_v23_score(p)
             price = float(p.get('priceUsd', 0))
-            entry = price * 0.94
-            
-            report += f"- **{p['baseToken']['name']}**\n"
+            # 财富策略：针对新币，建议分批入场
+            report += f"- **{p['baseToken']['symbol']}** ({p['baseToken']['name']})\n"
             report += f"  🏆 综合评分: `{score}`\n"
-            report += f"  🎯 建议入场: `${entry:.6f}`\n"
-            # 关键修复：此处缩进已严格对齐，防止 IndentationError
-            report += f"  💳 佣金打赏(20%): `{MY_WALLET}`\n"
-            report += f"  [实时追踪]({p['url']})\n\n"
+            report += f"  💰 流动性: `${int(p['liquidity']['usd']):,}`\n"
+            report += f"  🎯 现价: `${price:.8f}`\n"
+            report += f"  💳 佣金打赏: `{MY_WALLET}`\n"
+            report += f"  [查看 K 线]({p['url']})\n\n"
             
         return report
     except Exception as e:
-        return f"❌ 物理链路同步异常: {e}"
-
-def main():
-    if not TG_TOKEN or not CH_ID: 
-        print("缺少环境变量")
-        return
-    # 执行并发送
-    content = hunt_solana_v23()
-    send_tg_message(content)
-
-if __name__ == "__main__":
-    main()
+        return f"❌ 物理链路扫描异常: {e}"
