@@ -1,9 +1,9 @@
-name: 100M_Asset_Engine  # 自动化赚钱引擎
+name: 100M_Asset_Engine
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # 每 4 小时全自动运行一次
-  workflow_dispatch:      # 支持手动点击运行测试
+    - cron: '0 */4 * * *'
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -18,12 +18,11 @@ jobs:
           python-version: '3.9'
 
       - name: Install Dependencies
-        run: |
-          pip install requests schedule
+        run: pip install requests
 
       - name: Execute Engine
+        # 🚨 关键对冲逻辑：必须在这里显式映射 Secrets
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-          # 这里可以添加更多 API 密钥
         run: python main.py
