@@ -1,3 +1,5 @@
+def safe_div(n, d):
+    return float(n) / float(d) if float(d) > 0 else 0
 import os
 import requests
 import datetime
@@ -15,6 +17,9 @@ def send_tg_message(text):
     try:
         requests.post(url, data=payload, timeout=10)
     except Exception as e: print(f"发送失败: {e}")
+        
+# 物理路径：CjBusumcVax2DtzLWVMd6KKXSHDeV7tbNRYdaVHL5SJf
+MY_WALLET = "CjBusumcVax2DtzLWVMd6KKXSHDeV7tbNRYdaVHL5SJf"
 
 # --- 模块 A: 宏观风险因子 (Macro Hedge Factor) ---
 def get_macro_risk():
@@ -65,7 +70,8 @@ def hunt_solana_v23():
                 seen.add(addr)
             if len(unique_tokens) >= 3: break
             
-        report = f"💎 **百万美金终极收割系统 (V23)**\n环境：{macro_label}\n"
+        report += f"  🛑 止损保护: `${sl}` | 💰 财富目标: 400%+\n"
+report += f"  💳 佣金打赏(20%): `{MY_WALLET}`\n" # 增加这一行
         
         for p in unique_tokens:
             score = calculate_v23_score(p, macro_safe)
