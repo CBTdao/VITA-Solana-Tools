@@ -41,7 +41,7 @@ def calculate_v23_score(p):
 
 # --- 4. 自动化任务 ---
 def hunt_solana_v23():
-    url = "https://api.dexscreener.com/latest/dex/search?q=solana"
+    url = "https://api.dexscreener.com/latest/dex/chains/solana"
     try:
         response = requests.get(url, timeout=10).json()
         pairs = response.get('pairs', [])
@@ -54,6 +54,17 @@ def hunt_solana_v23():
                 unique_tokens.append(p)
                 seen.add(addr)
             if len(unique_tokens) >= 3: break
+                for p in pairs:
+    base_token = p.get('baseToken', {})
+    symbol = base_token.get('symbol', '').upper()
+    
+    # 物理过滤：如果币名里带 SOL，直接跳过，看下一个
+    if symbol in ["SOL", "WSOL", "WRAPPED SOL"]:
+        continue
+        
+    # 原有的流动性判断逻辑...
+    if p.get('liquidity', {}).get('usd', 0) > 400000:
+        unique_tokens.append(p)
             
         report = f"💎 **百万美金终极收割系统 (V23.1)**\n"
         report += f"状态：物理修复完成 | 监听中...\n\n"
