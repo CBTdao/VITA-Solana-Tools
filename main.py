@@ -1,56 +1,71 @@
-import os, requests, time
+import os
+import requests
 
-# --- 1. 物理配置区 ---
+# --- 1. 配置区 ---
 TG_TOKEN = os.getenv("TG_BOT_TOKEN")
 CH_ID = os.getenv("CHANNEL_ID")
+# 物理路径：你的收款地址
 MY_WALLET = "CjBusumcVax2DtzLWVMd6KKXSHDeV7tbNRYdaVHL5SJf"
 
-def send_msg(text):
+def send_tg_message(text):
     if not TG_TOKEN or not CH_ID: return
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-    try: requests.post(url, data={"chat_id": CH_ID, "text": text, "parse_mode": "Markdown"}, timeout=15)
-    except: pass
+    payload = {
+        "chat_id": CH_ID,
+        "text": text,
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
+    }
+    try:
+        requests.post(url, data=payload, timeout=15)
+    except:
+        pass
 
-def get_data():
-    """采用物理模拟请求，绕过 API 屏蔽"""
-    url = "https://api.dexscreener.com/latest/dex/chains/solana"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    for _ in range(3): # 增加物理重试
-        try:
-            r = requests.get(url, headers=headers, timeout=20)
-            if r.status_code == 200: return r.json().get('pairs', [])
-        except: time.sleep(5)
-    return []
-
-# --- 2. 核心执行逻辑 (极简缩进模式) ---
-def main():
-    pairs = get_data()
-    if not pairs:
-        send_msg("⏳ **API 链路受限**：系统正在自动寻找镜像节点，请耐心等待...")
-        return
-
-    report = "🚀 **百万目标核心预警 (V23.6)**\n\n"
-    count = 0
-    for p in pairs:
-        # 物理过滤：排除原生 SOL，筛选 30w+ 流动性资产
-        sym = p.get('baseToken', {}).get('symbol', '').upper()
-        liq = float(p.get('liquidity', {}).get('usd', 0))
+# --- 2. 核心扫描 (V23.1 原始逻辑) ---
+def hunt_solana_v23():
+    # 采用搜索模式，这是 V23.1 最稳的路径
+    url = "https://api.dexscreener.com/latest/dex/search?q=solana"
+    try:
+        response = requests.get(url, timeout=20).json()
+        pairs = response.get('pairs', [])
         
-        if "SOL" in sym or liq < 300000: continue
+        unique_tokens = []
+        seen = set()
+        
+        for p in pairs:
+            # 基础过滤：流动性 > 40w
+            liq = float(p.get('liquidity', {}).get('usd', 0))
+            addr = p.get('baseToken', {}).get('address', '')
             
-        report += f"📍 **{sym}**\n"
-        report += f"💰 流动性: `${int(liq):,}`\n"
-        report += f"🎯 价格: `${p.get('priceUsd', '0')}`\n"
-        report += f"💳 佣金打赏: `{MY_WALLET}`\n"
-        report += f"🔗 [查看追踪]({p.get('url','')})\n\n"
-        
-        count += 1
-        if count >= 5: break
+            if addr not in seen and liq > 400000:
+                unique_tokens.append(p)
+                seen.add(addr)
+            
+            if len(unique_tokens) >= 3: break
+            
+        if not unique_tokens:
+            return "⏳ 系统扫描中，暂无符合 40w+ 流动性的信号。"
 
-    if count > 0:
-        send_msg(report)
-    else:
-        send_msg("🔎 扫描完成：当前链上暂无 30w 流动性以上的新爆发信号。")
+        report = f"🚀 **Solana 资产扫描 (V23.1)**\n\n"
+        
+        for p in unique_tokens:
+            sym = p['baseToken']['symbol']
+            price = p.get('priceUsd', '0')
+            
+            report += f"- **{sym}**\n"
+            report += f"  💰 流动性: `${int(float(p['liquidity']['usd'])):,}`\n"
+            report += f"  🎯 现价: `${price}`\n"
+            report += f"  💳 佣金打赏: `{MY_WALLET}`\n"
+            report += f"  [查看行情]({p['url']})\n\n"
+            
+        return report
+    except Exception as e:
+        return f"❌ 扫描异常: {str(e)[:30]}"
+
+# --- 3. 执行入口 ---
+def main():
+    content = hunt_solana_v23()
+    send_tg_message(content)
 
 if __name__ == "__main__":
     main()
