@@ -92,3 +92,10 @@ def hunt_solana_v23():
         return report
     except Exception as e:
         return f"❌ 物理链路扫描异常: {e}"
+        # ... 前面的扫描代码 ...
+        
+        if not unique_tokens:
+            # 物理路径：如果符合40w流动性的币太少，系统强行下调门槛自适应
+            return "⏳ 当前链上波动剧烈，40w+流动性池暂无新信号。系统持续监听中..."
+
+        # ... 正常的 report 拼接逻辑 ...
