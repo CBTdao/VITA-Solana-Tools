@@ -1,30 +1,37 @@
+
 import os
 import requests
 
-# 100万目标自动化引擎 - 诊断版
-def run_diagnostic():
+def fire_test():
+    # 从系统获取变量
     token = os.getenv("TG_BOT_TOKEN")
     chat_id = os.getenv("CHANNEL_ID")
     
+    print(f"--- 诊断开始 ---")
+    print(f"Token 是否读取: {'已读取' if token else '未读取 (检查 Secrets)'}")
+    print(f"Channel ID: {chat_id}")
+    
+    if not token or not chat_id:
+        print("❌ 错误：环境变量缺失！请检查 GitHub Secrets 设置。")
+        return
+
+    # 尝试发送请求
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
-        "text": "🚨 自动化引擎测试：通道已激活。若收到此消息，请确认下一步指令。",
+        "text": "🔥 100M_Asset_Engine 物理路径测试成功！\n状态：通道已打通。\n下一步：开启 Solana 监控模式。"
     }
     
-    print(f"--- 正在执行物理路径测试 ---")
     try:
         response = requests.post(url, data=payload)
-        result = response.json()
-        
-        if result.get("ok"):
-            print("✅ 成功！消息已发出。请检查频道。")
+        data = response.json()
+        if data.get("ok"):
+            print("✅ 恭喜！消息已成功送达 Telegram。")
         else:
-            # 这里的输出将直接告诉你为什么“只读不回”
-            print(f"❌ 失败原因: {result.get('description')}")
-            print(f"错误码: {result.get('error_code')}")
+            print(f"❌ Telegram 返回错误: {data.get('description')}")
+            print(f"错误码: {data.get('error_code')}")
     except Exception as e:
-        print(f"🔥 系统崩溃风险：{str(e)}")
+        print(f"🔥 系统崩溃: {str(e)}")
 
 if __name__ == "__main__":
-    run_diagnostic()
+    fire_test()
