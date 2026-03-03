@@ -1,27 +1,23 @@
 name: 100M_Asset_Engine
 
 on:
+  workflow_dispatch: 
   schedule:
     - cron: '0 */4 * * *'
-  workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
+      - uses: actions/checkout@v3
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
-      - name: Install Dependencies
+      - name: Install dependencies
         run: pip install requests
-
       - name: Execute Engine
-        # 🚨 关键对冲逻辑：必须在这里显式映射 Secrets
+        # 🚨 重点：你必须手动加上下面这两行映射，脚本才能读到数据
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
