@@ -5,66 +5,53 @@ import time
 # ================= 物理配置区 =================
 TG_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TG_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-# 验证阶段门槛设为 2w
-MIN_LIQUIDITY = 20000 
+MIN_LIQUIDITY = 30000 # 维持 3w 确保有币
 # =============================================
 
-def fetch_real_alpha():
-    # 物理升级：直接访问 Solana 链的高活跃度交易池总览
+def fetch_alpha():
     url = "https://api.dexscreener.com/latest/dex/search?q=solana%20raydium"
-    print(f"[{time.strftime('%H:%M:%S')}] 深度钻取启动，正在物理绕开 SOL 干扰...")
-    
     try:
-        response = requests.get(url, timeout=15)
-        data = response.json()
-        pairs = data.get('pairs', [])
-        
+        res = requests.get(url, timeout=15)
+        pairs = res.json().get('pairs', [])
         results = []
-        # 严格排除审计列表
-        exclude_list = ['SOL', 'WSOL', 'USDC', 'USDT', 'UXD', 'MSOL', 'JITOSOL']
-        
         for p in pairs:
-            if p.get('chainId') != 'solana': continue
-            
             liq = float(p.get('liquidity', {}).get('usd', 0))
             symbol = p.get('baseToken', {}).get('symbol', 'Unknown')
-            
-            # 日志仅打印非 SOL 的代币，方便我们排查
-            if symbol.upper() not in exclude_list:
-                print(f"🔍 发现代币: {symbol} | 流动性: ${liq:,.0f}")
-                if liq >= MIN_LIQUIDITY:
-                    print(f"✅ 审计通过: {symbol}")
-                    results.append({
-                        "name": symbol, "liq": liq, 
-                        "price": p.get('priceUsd', '0'),
-                        "url": p.get('url')
-                    })
+            if symbol.upper() not in ['SOL', 'WSOL', 'USDC'] and liq >= MIN_LIQUIDITY:
+                results.append({"name": symbol, "liq": liq, "url": p.get('url')})
         return results
-    except Exception as e:
-        print(f"🚨 链路异常: {str(e)}")
-        return []
+    except: return []
 
-def deliver_signal(s):
-    if not TG_TOKEN or not TG_CHAT_ID: return
-    report = (
-        f"🚨 *Alpha 信号 (2w+)*\n\n"
-        f"💎 代币: #{s['name']}\n"
-        f"💰 流动性: ${s['liq']:,.0f}\n"
-        f"💵 价格: ${s['price']}\n\n"
-        f"🔗 [查看详情]({s['url']})"
-    )
+def deliver_debug(s):
+    # 物理打印：让我们在日志里看到底发没发出去
+    print(f"📡 正在尝试投递: {s['name']} (目标 ID: {TG_CHAT_ID})")
+    
+    if not TG_TOKEN or not TG_CHAT_ID:
+        print("❌ 物理故障：Secrets 里没填 Token 或 ID！")
+        return
+
+    report = f"🚨 物理链路自检\n代币: {s['name']}\n流动性: ${s['liq']:,.0f}\n链接: {s['url']}"
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    
     try:
-        requests.post(url, json={
-            "chat_id": TG_CHAT_ID, "text": report,
-            "parse_mode": "Markdown"
+        resp = requests.post(url, json={
+            "chat_id": TG_CHAT_ID, 
+            "text": report
         }, timeout=10)
-        print(f"🚀 TG 发射成功: {s['name']}")
-    except: pass
+        
+        # 物理报错捕获
+        if resp.status_code == 200:
+            print(f"✅ TG 物理反馈：发送成功！")
+        else:
+            print(f"❌ TG 物理反馈错误：代码 {resp.status_code} | 信息: {resp.text}")
+    except Exception as e:
+        print(f"🚨 网络层物理崩溃: {e}")
 
 if __name__ == "__main__":
-    signals = fetch_real_alpha()
-    print(f"--- 最终捕获 {len(signals)} 个非 SOL 信号 ---")
-    for sig in signals:
-        deliver_signal(sig)
-        time.sleep(1)
+    print(f"--- 物理链路全扫描开始 ---")
+    signals = fetch_alpha()
+    if not signals:
+        print("当前市场暂无符合 3w 门槛的币。")
+    else:
+        # 只测第一个，节省日志空间
+        deliver_debug(signals[0])
