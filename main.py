@@ -1,45 +1,82 @@
-import os, requests, datetime
+import requests
+import os
+import json
 
-# --- 配置区 ---
-TG_TOKEN = os.getenv("TG_BOT_TOKEN")
-CH_ID = os.getenv("CHANNEL_ID")
-WEBHOOK_URL = os.getenv("TWITTER_WEBHOOK") # 预留给自动发推工具
+# ================= 配置区 =================
+# 物理路径映射：请确保在 GitHub Secrets 中已配置这些变量
+TG_TOKEN = os.getenv('TELEGRAM_TOKEN')
+TG_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+# 阈值下调至 20w，兼顾 Alpha 捕捉与风险对冲
+MIN_LIQUIDITY = 200000 
+# ==========================================
 
-def send_tg(text):
-    if not TG_TOKEN or not CH_ID: return
-    requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
-                 data={"chat_id": CH_ID, "text": text, "parse_mode": "Markdown"})
-
-# --- 懒人策略：自动化变现情报 ---
-def get_lazy_strategy():
-    now = datetime.datetime.now()
-    # 周期性自动更换变现主题，无需人工干预
-    strategies = [
-        "【被动引流】将本频道置顶信号转发至 3 个 Solana Meme 社群，设置机器人自动回复。",
-        "【资产锚定】检查地址，若有打赏则自动触发‘感谢名单’，建立社群归属感。",
-        "【流量套利】开启 Webhook 自动同步，今日无需手动发推，关注私信即可。"
-    ]
-    return strategies[now.day % len(strategies)]
-
-def hunt_v23_1_4():
-    # 沿用最稳的搜索路径
+def get_solana_signals():
+    """
+    抓取 Solana 链上高流动性代币的物理数据
+    """
     url = "https://api.dexscreener.com/latest/dex/search?q=solana"
     try:
-        r = requests.get(url, timeout=20).json()
-        pairs = r.get('pairs', [])[:3] # 只取前3，保持简洁
+        response = requests.get(url, timeout=15)
+        if response.status_code != 200:
+            print(f"物理链路抖动: HTTP {response.status_code}")
+            return []
         
-        report = f"🤖 **V23.1.4 自动化收割机**\n"
-        report += f"💡 **今日躺平策略**：{get_lazy_strategy()}\n"
-        report += f"---"
+        data = response.json()
+        pairs = data.get('pairs', [])
         
+        filtered_signals = []
         for p in pairs:
-            if float(p.get('liquidity', {}).get('usd', 0)) > 400000:
-                report += f"\n📍 **{p['baseToken']['symbol']}** | Liq: ${int(float(p['liquidity']['usd'])):,}"
-                report += f"\n🔗 [点击分析]({p['url']})\n"
-        
-        report += f"\n💳 100w目标回收站: `CjBusumcVax2DtzLWVMd6KKXSHDeV7tbNRYdaVHL5SJf`"
-        return report
-    except: return "⏳ 链路自愈中..."
+            # 物理过滤逻辑：必须是 Solana 链且流动性 > 20w
+            liq_usd = float(p.get('liquidity', {}).get('usd', 0))
+            if p.get('chainId') == 'solana' and liq_usd > MIN_LIQUIDITY:
+                # 排除原生 SOL 本身，只抓取代币
+                if p.get('baseToken', {}).get('symbol') != 'SOL':
+                    signal = {
+                        "symbol": p.get('baseToken', {}).get('symbol'),
+                        "price": p.get('priceUsd'),
+                        "liq": liq_usd,
+                        "vol_24h": p.get('volume', {}).get('h24', 0),
+                        "url": p.get('url')
+                    }
+                    filtered_signals.append(signal)
+        return filtered_signals
+    except Exception as e:
+        print(f"数据解析解析出错: {str(e)}")
+        return []
+
+def send_to_tg(message):
+    """
+    物理投递：将信号发送至 Telegram，供 Make.com 抓取
+    """
+    if not message:
+        return
+    
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TG_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"投递失败: {e}")
 
 if __name__ == "__main__":
-    send_tg(hunt_v23_1_4())
+    print("V23.1.15 引擎启动，正在物理扫描 Solana 链...")
+    signals = get_solana_signals()
+    
+    if not signals:
+        print("当前市场未发现 20w 流动性以上的优质代币（已过滤 $SOL）。")
+    else:
+        for s in signals:
+            report = (
+                f"🚨 *Alpha 信号 (20w+)*\n"
+                f"代币: {s['symbol']}\n"
+                f"价格: ${s['price']}\n"
+                f"流动性: ${s['liq']:,.0f}\n"
+                f"24h成交: ${s['vol_24h']:,.0f}\n"
+                f"链接: [DexScreener]({s['url']})"
+            )
+            print(f"发现信号: {s['symbol']}")
+            send_to_tg(report)
