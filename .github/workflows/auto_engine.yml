@@ -1,7 +1,7 @@
 name: Million_Asset_Engine_v2
 on:
   schedule:
-    - cron: '*/30 * * * *' # 每 30 分钟扫描一次全世界
+    - cron: '*/30 30 12 12' # 每 30分钟扫描一次全世界
   workflow_dispatch:      # 允许手动触发
 
 jobs:
